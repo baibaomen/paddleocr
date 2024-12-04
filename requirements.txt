@@ -1,0 +1,4 @@
+setuptools>=65.5.1
+Flask==3.0.2
+paddleocr>=2.7.0.3
+paddlepaddle==2.6.0 

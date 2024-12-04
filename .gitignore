@@ -1,0 +1,34 @@
+# Python虚拟环境
+venv/
+env/
+ENV/
+
+# Python编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 分发/打包
+dist/
+build/
+*.egg-info/
+
+# IDE配置
+.idea/
+.vscode/
+*.swp
+
+# 环境变量
+.env
+
+# 日志文件
+*.log
+
+# PaddleOCR模型文件和缓存
+inference/
+train_data/
+.paddleocr/
+
+# 系统文件
+.DS_Store
+Thumbs.db
