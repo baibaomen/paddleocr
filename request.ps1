@@ -1,6 +1,6 @@
 # ocr_request.ps1
 
-$uri = "http://localhost:5000/ocr"
+$uri = "http://localhost:25098/ocr"
 $imagePath = "C:\temp\general_ocr_002.png"
 $imageUrl = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_002.png"
 
@@ -15,7 +15,8 @@ if (-not (Test-Path $imagePath)) {
 
 # Prepare request body
 $body = @{
-    img_path = $imagePath
+#    img_path = $imagePath
+    img_url = $imageUrl
     cls = $true
 } | ConvertTo-Json
 
