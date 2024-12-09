@@ -69,7 +69,7 @@ def download_and_convert(image_url, secret_key):
 
 if __name__ == "__main__":
     # 从环境变量获取密钥，如果没有则使用默认值
-    secret_key = os.getenv('SECRET_KEY', 'key1')
+    secret_key = os.getenv('SECRET_KEY', 'your-key1')
     image_url = "https://api.minio.baibaomen.com/pub/ocr-test.png"
     
     success = download_and_convert(image_url, secret_key)
