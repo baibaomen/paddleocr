@@ -1,4 +1,4 @@
-# 使用官方的PaddlePaddle GPU镜像作为基础镜像。已测试3.0版本对不完整支持avx指令集的无法使用。
+# 使用官方的PaddlePaddle GPU镜像作为基础镜像
 FROM paddlepaddle/paddle:2.6.2-gpu-cuda12.0-cudnn8.9-trt8.6
 
 # 设置工作目录
@@ -15,13 +15,16 @@ RUN apt-get update && \
     libsm6 \
     libxext6 \
     libxrender-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
 COPY requirements.txt .
+COPY .env .
 
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install python-dotenv && \
     rm -rf ~/.cache/pip
 
 # 复制应用代码
