@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  paddleocr-web:
+    build: .
+    image: paddleocr-web
+    container_name: paddleocr-web
+    restart: unless-stopped
+    ports:
+      - "25098:25098"
+    environment:
+      - SECRET_KEY=your-key1,your-key2
+      - MAX_IMAGE_SIZE=10485760
+      - ALLOWED_ORIGINS=*
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
