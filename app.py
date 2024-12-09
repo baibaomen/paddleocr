@@ -22,8 +22,7 @@ MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 10485760))  # 默认10MB
 
 # 初始化Flask应用
 app = Flask(__name__)
-app.config['JSON_AS_ASCII'] = False
-app.config['JSONIFY_MIMETYPE'] = 'application/json; charset=utf-8'
+app.json.ensure_ascii = False
 
 # 初始化PaddleOCR
 ocr = PaddleOCR(use_angle_cls=True, lang='ch', det_limit_type='min')
@@ -123,7 +122,7 @@ OCR HTTP服务
 服务地址: {base_url}
 
 API接口:
-1. POST /ocr - OCR识别
+POST /ocr - OCR识别
    请求体格式: {{ "image": "图片URL或base64编码", "secret": "密钥" }}
    或在请求头中添加 X-Secret: 密钥
 
@@ -132,9 +131,6 @@ API接口:
      -H "Content-Type: application/json" \\
      -H "X-Secret: your-secret-key" \\
      -d '{{"image": "图片URL或base64编码"}}'
-
-2. GET /health - 健康检查
-   curl {base_url}/health
 
 注意事项:
 - 支持图片URL或base64编码
@@ -227,6 +223,7 @@ def ocr_endpoint():
                 'process_time': f"{process_time:.2f}s"
             })
         )
+        response.headers['Content-Type'] = 'application/json; charset=utf-8'
         return response
 
     except Exception as e:
