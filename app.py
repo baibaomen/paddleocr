@@ -138,13 +138,6 @@ def ocr_endpoint():
 
         process_time = time.time() - start_time
 
-        response = {
-            'success': True,
-            'raw_result': formatted_result,
-            'text_results': text_results,
-            'process_time': f"{process_time:.2f}s"
-        }
-
         return jsonify({
             'success': True,
             'raw_result': formatted_result,
