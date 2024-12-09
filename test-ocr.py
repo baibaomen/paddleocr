@@ -4,10 +4,6 @@ import requests
 import base64
 import json
 import os
-from dotenv import load_dotenv
-
-# 加载环境变量
-load_dotenv()
 
 def download_and_convert(image_url, secret_key):
     """
@@ -73,7 +69,7 @@ def download_and_convert(image_url, secret_key):
 
 if __name__ == "__main__":
     # 从环境变量获取密钥，如果没有则使用默认值
-    secret_key = os.getenv('SECRET_KEY', 'key1')
+    secret_key = os.getenv('OCR_SECRET_KEY', 'your-secret-key-here')
     image_url = "https://api.minio.baibaomen.com/pub/ocr-test.png"
     
     success = download_and_convert(image_url, secret_key)
