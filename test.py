@@ -10,7 +10,10 @@ from io import BytesIO
 from PIL import Image
 import json
 
-# Paddleocr supports Chinese, English, French, German, Korean and Japanese
+# 初始化Flask应用
+app = Flask(__name__)
+
+# 初始化PaddleOCR
 ocr = PaddleOCR(use_angle_cls=True, lang='ch', det_limit_type='min')
 
 def is_base64_image(s):
@@ -80,54 +83,74 @@ def process_image(content):
         print(f"[ERROR] OCR处理错误: {str(e)}")
         raise
 
-def main():
-    print("\nOCR服务已启动. 按Ctrl+C退出.\n")
-    while True:
-        try:
-            img_input = input("请输入图片URL或base64编码 (或按Ctrl+C退出): ")
-            if not img_input.strip():
-                print("[WARN] 输入不能为空")
-                continue
+@app.route('/ocr', methods=['POST'])
+def ocr_endpoint():
+    """
+    OCR服务HTTP接口
+    请求体格式: { "image": "图片URL或base64编码" }
+    """
+    try:
+        # 获取并验证请求数据
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({
+                'success': False,
+                'error': '请求体必须包含image字段'
+            }), 400
 
-            # 获取图片数据
-            try:
-                content = get_image_content(img_input)
-            except Exception as e:
-                print(f"[ERROR] 图片获取失败: {str(e)}")
-                continue
+        img_input = data['image']
+        if not img_input.strip():
+            return jsonify({
+                'success': False,
+                'error': 'image不能为空'
+            }), 400
 
-            # 处理OCR
-            try:
-                result = process_image(content)
-
-                # 打印结果
-                print("\nOCR结果:")
-                if not result or len(result) == 0:
-                    print("未检测到文本")
+        # 获取图片内容
+        content = get_image_content(img_input)
+        
+        # 执行OCR处理
+        result = process_image(content)
+        
+        # 格式化OCR结果
+        text_results = []
+        if result and len(result) > 0:
+            for idx in range(len(result)):
+                res = result[idx]
+                if not res:
                     continue
+                for line in res:
+                    text_results.append(line[1][0])
 
-                print(json.dumps(result, ensure_ascii=False, indent=2))
+        return jsonify({
+            'success': True,
+            'raw_result': result,
+            'text_results': text_results
+        })
 
-                for idx in range(len(result)):
-                    res = result[idx]
-                    if not res:  # 检查是否为空列表
-                        continue
-                    for line in res:
-                        print(line[1][0])
+    except Exception as e:
+        print(f"[ERROR] 处理失败: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
-            except Exception as e:
-                print(f"[ERROR] OCR处理失败: {str(e)}")
-                if str(e).strip():  # 只在有错误信息时打印堆栈
-                    print(traceback.format_exc())
-                continue
+@app.route('/health', methods=['GET'])
+def health_check():
+    """
+    健康检查接口
+    """
+    return jsonify({
+        'status': 'ok',
+        'timestamp': datetime.now().isoformat()
+    })
 
-        except KeyboardInterrupt:
-            print("\n程序已退出")
-            break
-        except Exception as e:
-            print(f"[ERROR] 发生未知错误: {str(e)}")
-            print(traceback.format_exc())
-            continue
+def main():
+    print("\nOCR HTTP服务已启动在 http://0.0.0.0:25098\n")
+    print("API接口:")
+    print("1. POST /ocr - OCR识别")
+    print("2. GET /health - 健康检查")
+    app.run(host='0.0.0.0', port=25098)
 
 if __name__ == "__main__":
     main()

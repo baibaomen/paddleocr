@@ -2,163 +2,155 @@ from flask import Flask, request, jsonify
 from paddleocr import PaddleOCR
 import requests
 import base64
-import logging
 import time
+import traceback
+import numpy as np
 from datetime import datetime
 from io import BytesIO
 from PIL import Image
+import json
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
-
+# 初始化Flask应用
 app = Flask(__name__)
 
 # 初始化PaddleOCR
-logger.info("Initializing PaddleOCR models...")
-ocrCn = PaddleOCR(use_angle_cls=True, lang='ch')
-ocrEn = PaddleOCR(use_angle_cls=True, lang='en')
-logger.info("PaddleOCR models initialized successfully")
+ocr = PaddleOCR(use_angle_cls=True, lang='ch', det_limit_type='min')
 
-def calculate_slice_params(image_width, image_height):
+def is_base64_image(s):
     """
-    根据图片尺寸计算合适的slice参数
+    检查字符串是否为base64编码的图片
     """
-    horizontal_stride = max(300, min(800, image_width // 3))
-    vertical_stride = max(300, min(800, image_height // 3))
-    
-    merge_x_thres = 12
-    merge_y_thres = 12
-    
-    return {
-        "horizontal_stride": horizontal_stride,
-        "vertical_stride": vertical_stride,
-        "merge_x_thres": merge_x_thres,
-        "merge_y_thres": merge_y_thres
-    }
+    return isinstance(s, str) and (
+        s.startswith('data:image/') or 
+        (len(s) % 4 == 0 and all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=' for c in s))
+    )
 
-def get_image_from_url(img_url):
+def get_image_content(img_input):
     """
-    从URL获取图片，返回BytesIO对象
+    获取图片内容，支持URL和base64
     """
-    start_time = time.time()
-    logger.info(f"Starting to download image from: {img_url}")
-    
-    response = requests.get(img_url, stream=True)
-    response.raise_for_status()
-    
-    image_data = BytesIO(response.content)
-    
-    download_time = time.time() - start_time
-    logger.info(f"Image downloaded (took {download_time:.2f}s)")
-    
-    return image_data
-
-def get_image_from_base64(base64_string):
-    """
-    从base64字符串获取图片，返回BytesIO对象
-    """
-    start_time = time.time()
-    logger.info("Processing base64 image")
-    
-    # 移除base64头部信息（如果存在）
-    if ',' in base64_string:
-        base64_string = base64_string.split(',')[1]
-    
-    image_data = BytesIO(base64.b64decode(base64_string))
-    
-    process_time = time.time() - start_time
-    logger.info(f"Base64 image processed (took {process_time:.2f}s)")
-    
-    return image_data
-
-@app.route('/ocr', methods=['POST'])
-def perform_ocr():
-    request_start_time = time.time()
-    logger.info("Received OCR request")
-    
     try:
-        data = request.get_json()
-        logger.info("Request received")
-
-        # 获取语言设置
-        lang = data.get('lang', 'ch')
-        ocr = ocrEn if lang == 'en' else ocrCn
+        start_time = time.time()
         
-        img_url = data.get('img_url')
-        if not img_url:
-            raise ValueError("Missing img_url in request")
-
-        # 处理图片输入
-        if img_url.startswith(('http://', 'https://')):
-            image_data = get_image_from_url(img_url)
+        if is_base64_image(img_input):
+            print("[INFO] 检测到base64编码图片")
+            # 如果包含data URI scheme，移除它
+            if img_input.startswith('data:image/'):
+                base64_data = img_input.split(',')[1]
+            else:
+                base64_data = img_input
+                
+            content = base64.b64decode(base64_data)
+            print(f"[INFO] base64解码完成 (耗时 {time.time() - start_time:.2f}秒)")
         else:
-            # 假设非URL的输入是base64编码
-            image_data = get_image_from_base64(img_url)
+            print(f"[INFO] 开始下载图片: {img_input}")
+            response = requests.get(img_input, stream=True)
+            response.raise_for_status()
+            content = response.content
+            print(f"[INFO] 图片下载完成 (耗时 {time.time() - start_time:.2f}秒)")
+            
+        return content
+    except Exception as e:
+        print(f"[ERROR] 图片获取失败: {str(e)}")
+        raise
 
-        # 获取图片尺寸
-        logger.info("Reading image dimensions")
-        image_start_time = time.time()
-        with Image.open(image_data) as img:
-            width, height = img.size
-        logger.info(f"Image dimensions: {width}x{height}")
-
-        # 重置文件指针到开始位置
-        image_data.seek(0)
-
-        # 计算slice参数
-        if width > 2000 or height > 2000:
-            slice_config = data.get('slice', calculate_slice_params(width, height))
-            logger.info(f"Using slice config: {slice_config}")
-        else:
-            slice_config = data.get('slice', {})
-            logger.info("No slice config needed")
-
-        # 执行OCR
-        logger.info("Starting OCR processing")
+def process_image(content):
+    """
+    处理图片并执行OCR
+    """
+    try:
         ocr_start_time = time.time()
-        result = ocr.ocr(image_data, cls=data.get('cls', True), slice=slice_config)
+        print("[INFO] 开始OCR处理")
+
+        # 转换为PIL Image
+        image = Image.open(BytesIO(content))
+        width, height = image.size
+        print(f"[INFO] 图片尺寸: {width}x{height}")
+
+        # 转换为numpy数组
+        image_array = np.array(image)
+
+        result = ocr.ocr(image_array)
+
+        if result is None:
+            raise ValueError("OCR未返回结果")
+
         ocr_time = time.time() - ocr_start_time
-        logger.info(f"OCR processing completed in {ocr_time:.2f}s")
-
-        # 格式化结果
-        formatted_result = []
-        for idx in range(len(result)):
-            res = result[idx]
-            page_result = []
-            for line in res:
-                page_result.append({
-                    'position': line[0],
-                    'text': line[1][0],
-                    'confidence': float(line[1][1])
-                })
-            formatted_result.append(page_result)
-
-        total_time = time.time() - request_start_time
-        response_data = {
-            'status': 'success',
-            'result': formatted_result,
-            'processing_time': {
-                'total': f"{total_time:.2f}s",
-                'ocr': f"{ocr_time:.2f}s"
-            }
-        }
-        
-        logger.info(f"Request completed in {total_time:.2f}s")
-        return jsonify(response_data)
+        print(f"[INFO] OCR处理完成 (耗时 {ocr_time:.2f}秒)")
+        return result
 
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}", exc_info=True)
+        print(f"[ERROR] OCR处理错误: {str(e)}")
+        raise
+
+@app.route('/ocr', methods=['POST'])
+def ocr_endpoint():
+    """
+    OCR服务HTTP接口
+    请求体格式: { "image": "图片URL或base64编码" }
+    """
+    try:
+        # 获取并验证请求数据
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({
+                'success': False,
+                'error': '请求体必须包含image字段'
+            }), 400
+
+        img_input = data['image']
+        if not img_input.strip():
+            return jsonify({
+                'success': False,
+                'error': 'image不能为空'
+            }), 400
+
+        # 获取图片内容
+        content = get_image_content(img_input)
+        
+        # 执行OCR处理
+        result = process_image(content)
+        
+        # 格式化OCR结果
+        text_results = []
+        if result and len(result) > 0:
+            for idx in range(len(result)):
+                res = result[idx]
+                if not res:
+                    continue
+                for line in res:
+                    text_results.append(line[1][0])
+
         return jsonify({
-            'status': 'error',
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
+            'success': True,
+            'raw_result': result,
+            'text_results': text_results
+        })
+
+    except Exception as e:
+        print(f"[ERROR] 处理失败: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
-if __name__ == '__main__':
-    logger.info("Starting OCR service on port 25098")
-    app.run(host='0.0.0.0', port=25098) 
+@app.route('/health', methods=['GET'])
+def health_check():
+    """
+    健康检查接口
+    """
+    return jsonify({
+        'status': 'ok',
+        'timestamp': datetime.now().isoformat()
+    })
+
+def main():
+    print("\nOCR HTTP服务已启动在 http://0.0.0.0:25098\n")
+    print("API接口:")
+    print("1. POST /ocr - OCR识别")
+    print("2. GET /health - 健康检查")
+    app.run(host='0.0.0.0', port=25098)
+
+if __name__ == "__main__":
+    main()
